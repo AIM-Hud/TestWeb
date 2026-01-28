@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elena Olympic - 3 Chế Độ</title>
+    <script src="toan.js"></script>
+    <script src="van.js"></script>
+    <script src="dovui.js"></script>
+    <style>
+        :root { --p: #2c3e50; --s: #3498db; --w: #ffffff; }
+        body { font-family: sans-serif; background: #f0f3f5; padding: 10px; margin: 0; }
+        .container { max-width: 500px; margin: auto; background: var(--w); padding: 20px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+        input[type="text"], input[type="password"] { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
+        button { width: 100%; padding: 15px; background: var(--s); color: var(--w); border: none; border-radius: 10px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        .hidden { display: none; }
+        .profile-card { background: var(--p); color: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; text-align: center; }
+        .rank-badge { background: #f1c40f; color: #000; padding: 5px 15px; border-radius: 20px; font-size: 14px; display: inline-block; margin-top: 10px; font-weight: bold;}
+        .q-block { background: #f9f9f9; padding: 15px; border-radius: 10px; margin-bottom: 15px; border-left: 5px solid var(--s); }
+        .opt-label { display: block; padding: 12px; background: #fff; margin: 8px 0; border: 1px solid #eee; border-radius: 10px; cursor: pointer; transition: 0.2s; }
+        .opt-label:active { background: #d6eaf8; }
+        #timer { font-size: 24px; color: #e74c3c; text-align: center; font-weight: bold; margin-bottom: 15px; background: #ffeaea; padding: 10px; border-radius: 10px;}
+        .lb-item { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #eee; }
+        .mode-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 20px 0; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="auth-screen">
+        <h2 id="auth-title" style="text-align:center">ELENA LOGIN</h2>
+        <input type="text" id="username" placeholder="Tên học sinh">
+        <input type="password" id="password" placeholder="Mật khẩu">
+        <button onclick="handleAuth()" id="auth-btn">VÀO HỌC</button>
+        <p style="text-align:center; color:var(--s); cursor:pointer" onclick="toggleAuth()" id="auth-toggle">Chưa có tài khoản? Đăng ký</p>
+    </div>
+
+    <div id="profile-screen" class="hidden">
+        <div class="profile-card">
+            <h3>Chào, <span id="p-name"></span></h3>
+            <p>Điểm: <span id="p-score">0</span></p>
+            <div id="p-rank" class="rank-badge">Tập sự</div>
+        </div>
+
+        <h4 style="text-align:center">CHỌN MÔN THI</h4>
+        <div class="mode-grid">
+            <button style="background:#e74c3c" onclick="selectMode('Toan')">TOÁN HỌC</button>
+            <button style="background:#27ae60" onclick="selectMode('Van')">TIẾNG VIỆT</button>
+            <button style="background:#f1c40f; color:#000; grid-column: span 2;" onclick="selectMode('DoVui')">ĐỐ VUI HẠI NÃO</button>
+        </div>
+
+        <div id="leaderboard">
+            <h4 style="text-align:center">🏆 BẢNG XẾP HẠNG TOP 10</h4>
+            <div id="lb-content">Đang tải...</div>
+        </div>
+        <button style="background:#95a5a6; margin-top:20px" onclick="location.reload()">ĐĂNG XUẤT</button>
+    </div>
+
+    <div id="quiz-screen" class="hidden">
+        <div id="timer">10:00</div>
+        <div id="quiz-content"></div>
+        <button onclick="submitQuiz()" style="background:#e67e22">NỘP BÀI</button>
+    </div>
+</div>
+
+<script>
+    const DB_URL = "https://marth-ce8b5-default-rtdb.firebaseio.com/students";
+    let currentUser = null;
+    let isLoginMode = true;
+    let currentQuestions = [];
+    let bankActive = [];
+    let timerInterval;
+
+    function toggleAuth() {
+        isLoginMode = !isLoginMode;
+        document.getElementById('auth-title').innerText = isLoginMode ? "ELENA LOGIN" : "ELENA REGISTER";
+        document.getElementById('auth-btn').innerText = isLoginMode ? "VÀO HỌC" : "TẠO TÀI KHOẢN";
+    }
+
+    async function handleAuth() {
+        const u = document.getElementById('username').value.trim();
+        const p = document.getElementById('password').value.trim();
+        if(!u || !p) return alert("Nhập đủ thông tin!");
+        const res = await fetch(`${DB_URL}.json`);
+        const data = await res.json() || {};
+        if(isLoginMode) {
+            let id = Object.keys(data).find(k => data[k].name === u && data[k].pass === p);
+            if(id) { currentUser = {id, ...data[id]}; showProfile(); }
+            else alert("Sai tài khoản!");
+        } else {
+            if(Object.values(data).some(x => x.name === u)) return alert("Tên đã dùng!");
+            const newUser = { name: u, pass: p, totalScore: 0 };
+            const post = await fetch(`${DB_URL}.json`, { method: 'POST', body: JSON.stringify(newUser)});
+            const postData = await post.json();
+            currentUser = { id: postData.name, ...newUser };
+            showProfile();
+        }
+    }
+
+    function getRank(score) {;
+        if(score >= 100000) return "✨👑✨ ADMIN";
+        if(score >= 1000) return "🔥 HUYỀN THOẠI";
+        if(score >= 500) return "💎 THÔNG THÁI";
+        if(score >= 200) return "🌟 CHIẾN BINH";
+        return "🌱 TẬP SỰ";
+    }
+
+    function showProfile() {
+        document.getElementById('auth-screen').classList.add('hidden');
+        document.getElementById('profile-screen').classList.remove('hidden');
+        document.getElementById('quiz-screen').classList.add('hidden');
+        document.getElementById('p-name').innerText = currentUser.name;
+        document.getElementById('p-score').innerText = currentUser.totalScore;
+        document.getElementById('p-rank').innerText = getRank(currentUser.totalScore);
+        loadLeaderboard();
+    }
+
+    async function loadLeaderboard() {
+        const res = await fetch(`${DB_URL}.json`);
+        const data = await res.json() || {};
+        const sorted = Object.values(data).sort((a,b) => b.totalScore - a.totalScore).slice(0,10);
+        document.getElementById('lb-content').innerHTML = sorted.map((s, i) => `
+            <div class="lb-item"><span>${i+1}. ${s.name}</span><b>${s.totalScore}đ</b></div>
+        `).join('');
+    }
+
+    function selectMode(mode) {
+        if(mode === 'Toan') bankActive = dataToan;
+        else if(mode === 'Van') bankActive = dataVan;
+        else if(mode === 'DoVui') bankActive = dataDoVui;
+        startQuiz();
+    }
+
+    function startQuiz() {
+        currentQuestions = bankActive.sort(() => 0.5 - Math.random()).slice(0, 10);
+        document.getElementById('profile-screen').classList.add('hidden');
+        document.getElementById('quiz-screen').classList.remove('hidden');
+        document.getElementById('quiz-content').innerHTML = currentQuestions.map((item, i) => `
+            <div class="q-block">
+                <p><b>Câu ${i+1}:</b> ${item.q}</p>
+                ${item.options.map(opt => `
+                    <label class="opt-label">
+                        <input type="radio" name="q${i}" value="${opt}"> ${opt}
+                    </label>
+                `).join('')}
+            </div>
+        `).join('');
+        startTimer();
+    }
+
+    function startTimer() {
+        let t = 600;
+        clearInterval(timerInterval);
+        timerInterval = setInterval(() => {
+            t--;
+            let m = Math.floor(t/60), s = t%60;
+            document.getElementById('timer').innerText = `${m}:${s<10?'0'+s:s}`;
+            if(t <= 0) submitQuiz();
+        }, 1000);
+    }
+
+    async function submitQuiz() {
+        clearInterval(timerInterval);
+        let score = 0;
+        currentQuestions.forEach((item, i) => {
+            const r = document.querySelector(`input[name="q${i}"]:checked`);
+            if(r && r.value === item.c) score++;
+        });
+        currentUser.totalScore += score;
+        await fetch(`${DB_URL}/${currentUser.id}.json`, { method: 'PATCH', body: JSON.stringify({totalScore: currentUser.totalScore})});
+        alert(`Bạn đúng ${score}/10 câu!`);
+        showProfile();
+    }
+</script>
+</body>
+</html>
+
